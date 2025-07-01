@@ -8,7 +8,7 @@ python-dotenv==1.0.0
 
 # chat_system.py
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 from langchain.llms.base import LLM
 from langchain.schema import BaseMessage, HumanMessage, AIMessage
@@ -29,16 +29,40 @@ class DeepSeekLLM(LLM):
     model_name: str = "deepseek-chat"
     temperature: float = 0.7
     max_tokens: int = 1024
-    
-    def __init__(self, api_key: str, **kwargs):
+
+    class Config:
+        """Configuration for this pydantic object."""
+        arbitrary_types_allowed = True
+
+    def __init__(self, api_key: str):  # 删除 **kwargs，直接只接收 api_key
+        """初始化 DeepSeek LLM"""
+
+        # 先调用父类的初始化
+        # super().__init__(
+        #     api_key=api_key,
+        #     api_base="https://api.deepseek.com/v1",
+        #     model_name="deepseek-chat",
+        #     temperature=0.7,
+        #     max_tokens=1024
+        # )
+
+        # 创建基类所需的所有参数字典
+        kwargs = {
+            "api_key": api_key,
+            "api_base": "https://api.deepseek.com/v1",
+            "model_name": "deepseek-chat",
+            "temperature": 0.7,
+            "max_tokens": 1024
+        }
+        # 调用父类初始化
         super().__init__(**kwargs)
-        self.api_key = api_key
+    
     
     @property
     def _llm_type(self) -> str:
         return "deepseek"
     
-    def _call(self, prompt: str, stop: List[str] = None) -> str:
+    def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
         """调用DeepSeek API"""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -78,13 +102,12 @@ class ChatSystem:
         # 创建对话模板
         self.prompt_template = PromptTemplate(
             input_variables=["history", "input"],
-            template="""你是一个有用的AI助手。请根据对话历史和用户当前的问题，给出准确、有帮助的回答。
-
-对话历史:
-{history}
-
-用户: {input}
-助手: """
+            template="""你是一个有用的AI助手。
+            请根据对话历史和用户当前的问题，给出准确、有帮助的回答。
+            对话历史:
+            {history}
+            用户: {input}
+            助手: """
         )
         
         # 初始化记忆
@@ -140,101 +163,3 @@ class ChatSystem:
         from datetime import datetime
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-# flask_app.py
-from flask import Flask, render_template, request, jsonify, session
-import uuid
-
-app = Flask(__name__)
-app.secret_key = "your-secret-key-here"
-
-# 存储用户会话
-chat_sessions = {}
-
-def get_chat_system():
-    """获取或创建聊天系统实例"""
-    session_id = session.get('session_id')
-    if not session_id:
-        session_id = str(uuid.uuid4())
-        session['session_id'] = session_id
-    
-    if session_id not in chat_sessions:
-        api_key = os.getenv('DEEPSEEK_API_KEY', 'your-deepseek-api-key')
-        chat_sessions[session_id] = ChatSystem(api_key)
-    
-    return chat_sessions[session_id]
-
-@app.route('/')
-def index():
-    """主页面"""
-    return render_template('index.html')
-
-@app.route('/api/single_chat', methods=['POST'])
-def single_chat():
-    """单轮对话API"""
-    try:
-        data = request.get_json()
-        user_input = data.get('message', '')
-        
-        if not user_input:
-            return jsonify({'error': '消息不能为空'}), 400
-        
-        chat_system = get_chat_system()
-        response = chat_system.single_turn_chat(user_input)
-        
-        return jsonify({
-            'response': response,
-            'type': 'single'
-        })
-    
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/multi_chat', methods=['POST'])
-def multi_chat():
-    """多轮对话API"""
-    try:
-        data = request.get_json()
-        user_input = data.get('message', '')
-        
-        if not user_input:
-            return jsonify({'error': '消息不能为空'}), 400
-        
-        chat_system = get_chat_system()
-        response = chat_system.multi_turn_chat(user_input)
-        
-        return jsonify({
-            'response': response,
-            'type': 'multi'
-        })
-    
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/history')
-def get_history():
-    """获取对话历史"""
-    try:
-        chat_system = get_chat_system()
-        history = chat_system.get_chat_history()
-        return jsonify({'history': history})
-    
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/clear', methods=['POST'])
-def clear_history():
-    """清空对话历史"""
-    try:
-        chat_system = get_chat_system()
-        chat_system.clear_history()
-        return jsonify({'message': '对话历史已清空'})
-    
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
-    # 确保有API密钥
-    if not os.getenv('DEEPSEEK_API_KEY'):
-        print("警告: 请设置DEEPSEEK_API_KEY环境变量")
-    
-    app.run(debug=True, host='0.0.0.0', port=5000)
