@@ -2,17 +2,6 @@ from chatwith_API import ChatSystem
 from langchain.llms import ChatDeepSeek
 
 def main():
-    # # 初始化ChatSystem
-    # api_key = "sk-f32eb4825d1740fbb81ee8d6bf8c3644"  # 替换为你的DeepSeek API密钥     
-    # chat_system = ChatSystem(api_key)
-    # # 测试单轮对话
-    # user_input = "你好，今天的天气怎么样？"
-    # response = chat_system.single_turn_chat(user_input)
-    # print(f"单轮对话响应: {response}")
-    # # 测试多轮对话
-    # user_input = "请告诉我一些关于Python编程的知识。"
-    # response = chat_system.multi_turn_chat(user_input) 
-    # print(f"多轮对话响应: {response}")
 
     llm = ChatDeepSeek(
     model="deepseek-chat",
