@@ -20,7 +20,7 @@ def main():
     max_tokens=None,
     timeout=None,
     max_retries=2,
-    api_key="sk-e508ba61639640848060a1a2c1ee7b17",  # 注意：这里的 API Key 应该是您自己的密钥
+    api_key="your api key",  # 注意：这里的 API Key 应该是您自己的密钥
     )
 
     # 定义对话消息
