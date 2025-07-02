@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with deepseek</title>
+    <!-- 引入 Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Markdown 解析器 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- 代码高亮 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/lib/core.min.js"></script>
+    <!-- 防XSS -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
+    <!-- 引入外部样式表 -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        /* 自定义覆盖样式 */
+        .mode-btn {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 2px solid #1e88e5;
+            background-color: white;
+            color: #1e88e5;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        .mode-btn:hover {
+            background-color: #e3f2fd;
+        }
+        
+        .mode-btn.active {
+            background-color: #1e88e5;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .clear-btn {
+            width: 100%;
+            padding: 10px;
+            background-color: #f44336;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        .clear-btn:hover {
+            background-color: #d32f2f;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* 基础样式重置 */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+
+        /* 主要布局组件 */
+        .app-container {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 左侧边栏 - 设置面板 */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            transition: transform 0.3s ease;
+            z-index: 100;
+        }
+
+        /* 设置面板组件样式 */
+        .sidebar-section {
+            margin-bottom: 24px;
+        }
+
+        .settings-group {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+        
+        .settings-group h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+
+        /* 设置项样式 */
+        .settings-item {
+            margin-bottom: 16px;
+        }
+
+        .settings-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        /* 主内容区域 - 聊天界面 */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 顶部标题栏 */
+        .chat-header {
+            height: var(--header-height);
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+
+        /* 聊天区域容器 */
+        .chat-wrapper {
+            flex: 1;
+            padding: 20px;
+            background: var(--background-color);
+        }
+
+        /* 主聊天区域布局 */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: calc(100% - var(--sidebar-width));
+            height: 100vh;
+            position: relative;
+        }
+
+        /* 消息列表区域 */
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 40px;
+            padding-bottom: 120px; /* 为底部固定的输入框留出更多空间 */
+            height: calc(100vh - 120px);
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0,0,0,0.2) transparent;
+        }
+        
+        .messages::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .messages::-webkit-scrollbar-thumb {
+            background-color: rgba(0,0,0,0.2);
+            border-radius: 3px;
+        }
+
+        /* 消息气泡基础样式 */
+        .message {
+            margin: 10px 20px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 80%;
+            animation: messageAppear 0.3s ease;
+            position: relative;
+        }
+
+        /* 用户消息样式 */
+        .message.user {
+            background-color: var(--primary-color);
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+
+        /* AI消息样式 */
+        .message.ai {
+            background-color: var(--chat-bg-ai);
+            margin-right: auto;
+            border-bottom-left-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* Markdown样式 */
+        .markdown-body {
+            font-size: 14px;
+            line-height: 1.6;
+            word-wrap: break-word;
+        }
+
+        .markdown-body pre {
+            background: #f6f8fa;
+            border-radius: 6px;
+            padding: 16px;
+            overflow: auto;
+        }
+
+        .markdown-body code {
+            background-color: rgba(175,184,193,0.2);
+            border-radius: 4px;
+            font-family: ui-monospace,SFMono-Regular,SF Mono,Menlo,Consolas,Liberation Mono,monospace;
+            font-size: 0.92em;
+            padding: 0.2em 0.4em;
+        }
+
+        .markdown-body pre code {
+            background: transparent;
+            border: 0;
+            padding: 0;
+        }
+
+        .markdown-body p {
+            margin: 0.5em 0;
+        }
+
+        .markdown-body ul, .markdown-body ol {
+            padding-left: 2em;
+            margin: 0.5em 0;
+        }
+
+        .markdown-body blockquote {
+            color: #57606a;
+            border-left: 4px solid #d0d7de;
+            margin: 0.5em 0;
+            padding: 0 1em;
+        }
+
+        .markdown-body table {
+            border-collapse: collapse;
+            margin: 1em 0;
+            width: 100%;
+        }
+
+        .markdown-body table th,
+        .markdown-body table td {
+            border: 1px solid #d0d7de;
+            padding: 6px 13px;
+        }
+
+        /* 输入区域样式 */
+        .input-container {
+            padding: 20px;
+            margin: 0 20px 20px 20px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            display: flex;
+            gap: 10px;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        textarea {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 1rem;
+            min-height: 60px;
+            resize: none;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        /* 按钮样式 */
+        .send-button {
+            padding: 12px 24px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .send-button:hover:not(:disabled) {
+            background: var(--primary-dark);
+        }
+
+        /* 加载动画 */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 12px 16px;
+            background: #f0f2f5;
+            border-radius: 12px;
+            margin: 10px 0;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            background-color: #1e88e5;
+            border-radius: 50%;
+            opacity: 0.6;
+            animation: bounce 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(1) {
+            animation-delay: 0s;
+        }
+        
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes bounce {
+            0%, 80%, 100% { 
+                transform: translateY(0);
+                opacity: 0.6;
+            }
+            40% { 
+                transform: translateY(-8px);
+                opacity: 1;
+            }
+        }
+
+        /* 动画效果定义 */
+        @keyframes messageAppear {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes typing {
+            from { width: 0 }
+            to { width: 100% }
+        }
+
+        /* 响应式布局 */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -100%;
+                top: 0;
+                bottom: 0;
+                z-index: 100;
+                transition: left 0.3s ease;
+            }
+
+            .chat-wrapper {
+                padding: 10px;
+            }
+
+            .message {
+                max-width: 90%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Vue应用模板 -->
+    <div id="app">
+        <div class="app-container">
+            <!-- 侧边栏：包含设置和控制选项 -->
+            <div class="sidebar">
+                <div class="settings-group">
+                    <h3>对话模式</h3>
+                    <button 
+                        :class="['mode-btn', { active: !multiTurnMode }]"
+                        @click="switchToSingleTurn">
+                        单轮对话
+                    </button>
+                    <button 
+                        :class="['mode-btn', { active: multiTurnMode }]"
+                        @click="switchToMultiTurn">
+                        多轮对话
+                    </button>
+                </div>
+
+                <div class="settings-group">
+                    <h3>模型选择</h3>
+                    <button 
+                        :class="['mode-btn', { active: !useOllama }]"
+                        @click="switchToDeepseek">
+                        DeepSeek API
+                    </button>
+                    <button 
+                        :class="['mode-btn', { active: useOllama }]"
+                        @click="switchToOllama">
+                        Ollama本地
+                    </button>
+                </div>
+
+                <div class="settings-group">
+                    <button class="clear-btn" @click="clearHistory">
+                        清空历史
+                    </button>
+                </div>
+            </div>
+
+            <!-- 主聊天区域 -->
+            <div class="chat-container">
+                <!-- 消息展示区 -->
+                <div class="messages" ref="messagesContainer">
+                    <div v-for="msg in messages" :key="msg.id" 
+                         :class="['message', msg.role === 'user' ? 'user' : 'ai']">
+                        <div class="message-content" :class="{ 'markdown-body': msg.role === 'assistant' }"
+                             v-html="msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content">
+                        </div>
+                        <div class="message-time">{{ msg.time }}</div>
+                    </div>
+                    <div v-if="loading" class="message ai">
+                        <div class="typing-indicator">
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 输入区域 -->
+                <div class="input-container">
+                    <textarea 
+                        v-model="userInput"
+                        @keydown.shift.enter.prevent="handleShiftEnter"
+                        @keydown.enter.prevent="handleEnter"
+                        placeholder="输入消息，Enter发送，Shift+Enter换行..."
+                        ref="inputArea">
+                    </textarea>
+                    <button 
+                        :disabled="loading || !userInput.trim()" 
+                        @click="sendMessage">
+                        发送
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vue应用逻辑 -->
+    <script>
+        // 创建Vue应用
+        const { createApp, ref, onMounted, nextTick } = Vue;
+
+        // 配置 marked
+        marked.setOptions({
+            highlight: function(code, language) {
+                if (language && hljs.getLanguage(language)) {
+                    return hljs.highlight(code, { language: language }).value;
+                }
+                return code;
+            },
+            breaks: true,
+            gfm: true
+        });
+
+        const app = createApp({
+            setup() {
+                // Markdown 渲染函数
+                const renderMarkdown = (text) => {
+                    try {
+                        const rendered = marked.parse(text);
+                        // 使用 DOMPurify 净化 HTML
+                        return DOMPurify.sanitize(rendered);
+                    } catch (e) {
+                        console.error('Markdown 渲染错误:', e);
+                        return text;
+                    }
+                };
+
+                // 响应式状态定义
+                const messages = ref([]);          // 消息历史
+                const userInput = ref('');         // 用户输入
+                const loading = ref(false);        // 加载状态
+                const multiTurnMode = ref(false);  // 对话模式
+                const useOllama = ref(false);      // 模型选择
+                const messagesContainer = ref(null);// 消息容器引用
+                const inputArea = ref(null);       // 输入框引用
+
+                // 消息发送处理
+                const sendMessage = async () => {
+                    if (loading.value || !userInput.value.trim()) return;
+                    
+                    // 准备用户消息
+                    const userMsg = {
+                        role: 'user',
+                        content: userInput.value,
+                        time: new Date().toLocaleTimeString(),
+                        id: Date.now()
+                    };
+                    messages.value.push(userMsg);
+                    
+                    loading.value = true;
+                    const input = userInput.value;
+                    userInput.value = '';
+
+                    try {
+                        // 根据模式选择API端点
+                        const endpoint = multiTurnMode.value ? '/multi_chat' : '/chat';
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            credentials: 'same-origin',  // 使用同源 cookies
+                            body: JSON.stringify({ 
+                                message: input,
+                                use_ollama: useOllama.value 
+                            })
+                        });
+
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            throw new Error(`网络请求失败: ${response.status} ${errorText}`);
+                        }
+                        
+                        const data = await response.json();
+                        if (!data || !data.response) {
+                            throw new Error('服务器响应格式错误');
+                        }
+                        let aiResponse = data.response;
+                        
+                        // 过滤<think>标签内容
+                        aiResponse = aiResponse.replace(/<think>[\s\S]*?<\/think>/g, '');
+                        
+                        // 添加AI响应消息
+                        messages.value.push({
+                            role: 'assistant',
+                            content: aiResponse,
+                            time: new Date().toLocaleTimeString(),
+                            id: Date.now()
+                        });
+
+                    } catch (error) {
+                        console.error('Error:', error);
+                        messages.value.push({
+                            role: 'assistant',
+                            content: '抱歉，出现了错误，请重试。',
+                            time: new Date().toLocaleTimeString(),
+                            id: Date.now()
+                        });
+                    } finally {
+                        loading.value = false;
+                        // 滚动到最新消息
+                        await nextTick();
+                        scrollToBottom();
+                    }
+                };
+
+                // 输入处理函数
+                const handleEnter = () => {
+                    if (!loading.value) sendMessage();
+                };
+
+                const handleShiftEnter = () => {
+                    userInput.value += '\n';
+                };
+
+                // 对话模式切换
+                const switchToSingleTurn = () => {
+                    multiTurnMode.value = false;
+                    clearHistory();
+                };
+
+                const switchToMultiTurn = () => {
+                    multiTurnMode.value = true;
+                    clearHistory();
+                };
+
+                // 模型切换
+                const switchToDeepseek = () => {
+                    useOllama.value = false;
+                };
+
+                const switchToOllama = () => {
+                    useOllama.value = true;
+                };
+
+                // 清空历史
+                const clearHistory = async () => {
+                    messages.value = [];
+                    try {
+                        const response = await fetch('/clear', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            credentials: 'same-origin'
+                        });
+                        if (!response.ok) {
+                            throw new Error('清空历史失败');
+                        }
+                    } catch (error) {
+                        console.error('清空历史时出错:', error);
+                    }
+                };
+
+                // 滚动到底部
+                const scrollToBottom = () => {
+                    if (messagesContainer.value) {
+                        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+                    }
+                };
+
+                // 组件挂载后自动聚焦输入框
+                onMounted(() => {
+                    if (inputArea.value) {
+                        inputArea.value.focus();
+                    }
+                });
+
+                return {
+                    messages,
+                    userInput,
+                    loading,
+                    multiTurnMode,
+                    useOllama,
+                    messagesContainer,
+                    inputArea,
+                    sendMessage,
+                    handleEnter,
+                    handleShiftEnter,
+                    switchToSingleTurn,
+                    switchToMultiTurn,
+                    switchToDeepseek,
+                    switchToOllama,
+                    clearHistory,
+                    renderMarkdown
+                };
+            }
+        });
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

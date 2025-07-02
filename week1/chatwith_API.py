@@ -11,7 +11,12 @@ import os
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 from langchain.llms.base import LLM
-from langchain.schema import BaseMessage, HumanMessage, AIMessage
+from langchain.schema import (
+    BaseMessage,
+    HumanMessage,
+    AIMessage,
+    SystemMessage
+)
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationChain
 from langchain.prompts import PromptTemplate
@@ -95,9 +100,24 @@ class DeepSeekLLM(LLM):
 class ChatSystem:
     """对话系统主类"""
     
-    def __init__(self, api_key: str):
-        # 初始化DeepSeek LLM
-        self.llm = DeepSeekLLM(api_key=api_key)
+    def __init__(self, api_key: str, use_ollama: bool = True):
+        """
+        初始化聊天系统
+        Args:
+            api_key: API密钥（用于DeepSeek模式）
+            use_ollama: 是否使用Ollama模式，默认False使用DeepSeek模式
+        """
+        if use_ollama:
+            # 使用Ollama模式
+            from langchain_community.chat_models import ChatOllama
+            self.llm = ChatOllama(
+                base_url="https://2a0b-2001-250-401-6601-d52e-2189-d785-cf66.ngrok-free.app",
+                model="deepseek-r1:14b",
+                temperature=0.7,
+            )
+        else:
+            # 使用DeepSeek模式
+            self.llm = DeepSeekLLM(api_key=api_key)
         
         # 创建对话模板
         self.prompt_template = PromptTemplate(
@@ -127,8 +147,17 @@ class ChatSystem:
     def single_turn_chat(self, user_input: str) -> str:
         """单轮对话 - 不保存历史记录"""
         try:
-            response = self.llm._call(user_input)
-            return response
+            if isinstance(self.llm, DeepSeekLLM):
+                # DeepSeek模式直接返回字符串
+                return self.llm._call(user_input)
+            else:
+                # 对于 ChatOllama，使用标准的消息格式
+                messages = [
+                    SystemMessage(content="你是一个有帮助的AI助手。"),
+                    HumanMessage(content=user_input)
+                ]
+                ai_message = self.llm(messages)  # 返回 AIMessage 对象
+                return str(ai_message.content)  # 确保返回字符串
         except Exception as e:
             return f"单轮对话出错: {str(e)}"
     
