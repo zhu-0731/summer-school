@@ -110,8 +110,10 @@ class ChatSystem:
         if use_ollama:
             # 使用Ollama模式
             from langchain_community.chat_models import ChatOllama
+            # 从环境变量获取 Ollama base_url
+            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
             self.llm = ChatOllama(
-                base_url="https://2a0b-2001-250-401-6601-d52e-2189-d785-cf66.ngrok-free.app",
+                base_url=ollama_base_url,
                 model="deepseek-r1:14b",
                 temperature=0.7,
             )
